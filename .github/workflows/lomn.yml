@@ -21,6 +21,7 @@ jobs:
       - name: Install Graphviz for Threat Model Diagrams
         run: |
           sudo apt-get update && sudo apt-get install -y graphviz
+
       - name: Run SawOne Agentic Scanner
         uses: hackin2minutes-oss/sawone-agentic-action@v1
         # zizmor: ignore[unpinned-uses]
