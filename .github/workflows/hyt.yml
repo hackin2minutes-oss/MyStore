@@ -1,0 +1,13 @@
+name: SAWONE
+on: [push]
+jobs:
+  sawone:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: SAWONE exploitability
+        uses: hackin2minutes-oss/ex-agent/universal@main
+        with:
+          reports: path/to/your-report.json
+          exposure: unknown
+          fail-on: confirmed_exploitable
