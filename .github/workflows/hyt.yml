@@ -1,36 +1,57 @@
-name: Exploitability Analysis
+# The workflow's display name in the Actions tab.
+name: Exploitability analysis
 
+# When the workflow runs: on every pull request, and on every push to main.
 on:
   pull_request:
   push:
     branches: [main]
 
+# Default permissions for the whole workflow. Read-only, so nothing can be written unless a job asks for it.
 permissions:
   contents: read
 
 jobs:
+  # One job, named "exploitability". The job id is used in logs and in "needs:" references.
   exploitability:
     runs-on: ubuntu-latest
+    # Job-level permissions. security-events: write lets the job upload SARIF to Code Scanning.
     permissions:
       contents: read
-      security-events: write # SARIF upload to Code Scanning
+      security-events: write
     steps:
+      # Download the repository so the scanner and the action can read its files.
       - uses: actions/checkout@v4
 
-      # Your existing scanner step goes here, and writes its report to a file in the workspace.
-      # Or commit the report to the repository and skip this step.
+      # Replace this with your scanner. It writes its report to $RUNNER_TEMP, which is outside the checkout,
+      # so the engine's clean-tree check does not see the report as an uncommitted change.
+      - name: Run your scanner
+        run: your-scanner --output "$RUNNER_TEMP/scanner-report.json"
 
-      - name: Run exploitability analysis
-        id: exploitability
+      # The action reads the report and assesses each finding. It does not run a scanner itself.
+      - name: Assess the findings
+        id: exploitability   # the id lets later steps read this step's outputs
         uses: hackin2minutes-oss/hackin2minutes-oss-exploitability-action@v2
         with:
-          reports: reports/semgrep.json
-          exposure: internet        # the application is reachable from the internet
-          fail-on: confirmed_exploitable
+          reports: ${{ runner.temp }}/scanner-report.json   # the report written above
+          exposure: internet        # declares the application is reachable from the internet
+          fail-on: confirmed_exploitable   # the step fails if any finding is CONFIRMED_EXPLOITABLE
 
+      # Send the SARIF results to Code Scanning, so they appear as alerts.
+      # "always()" runs this even if the assessment step failed. The hashFiles check skips it when no SARIF was written.
       - name: Upload SARIF to Code Scanning
         if: always() && hashFiles('exploitability-report/universal.sarif') != ''
+        # Pinned to a full commit SHA. The "# v3" comment says which release that commit is.
         uses: github/codeql-action/upload-sarif@4bfa242aa49c5f7c6770b98670d354a7dfac05f8 # v3
         with:
           sarif_file: exploitability-report/universal.sarif
-          category: exploitability
+          category: exploitability   # keeps these alerts apart from other Code Scanning tools
+
+      # Keep the PDF, Markdown, SARIF and JSON files as a downloadable artifact on the run page.
+      # "always()" keeps the files even when the gate fails, which is when they matter most.
+      - name: Keep the report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: exploitability-report   # the artifact's name in the run page
+          path: exploitability-report/  # the default output folder of the action
